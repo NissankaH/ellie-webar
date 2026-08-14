@@ -18,19 +18,28 @@ export default function EllieAR() {
         let hitTestSource = null;
         let hitTestSourceRequested = false;
 
-        let storyRoot = null;
+        let storyRoot;
 
         let scene1Model = null;
         let scene2Model = null;
         let scene3Model = null;
         let scene4Model = null;
 
-        let storyPlaced = false;
-        let modelsReady = false;
+        let ellieModel = null;
+        let ellieMixer = null;
+        let ellieWalkAction = null;
 
-        // -----------------------------------------
+        let storyPlaced = false;
+        let scenesReady = false;
+        let ellieReady = false;
+
+        let currentAudio = null;
+
+        const clock = new THREE.Clock();
+
+        // =========================================
         // THREE SCENE
-        // -----------------------------------------
+        // =========================================
 
         scene = new THREE.Scene();
 
@@ -41,9 +50,9 @@ export default function EllieAR() {
             50
         );
 
-        // -----------------------------------------
-        // LIGHTS
-        // -----------------------------------------
+        // =========================================
+        // LIGHTING
+        // =========================================
 
         const hemisphereLight = new THREE.HemisphereLight(
             0xffffff,
@@ -58,17 +67,13 @@ export default function EllieAR() {
             2
         );
 
-        directionalLight.position.set(
-            2,
-            4,
-            2
-        );
+        directionalLight.position.set(2, 4, 2);
 
         scene.add(directionalLight);
 
-        // -----------------------------------------
+        // =========================================
         // RENDERER
-        // -----------------------------------------
+        // =========================================
 
         renderer = new THREE.WebGLRenderer({
             antialias: true,
@@ -76,10 +81,7 @@ export default function EllieAR() {
         });
 
         renderer.setPixelRatio(
-            Math.min(
-                window.devicePixelRatio,
-                2
-            )
+            Math.min(window.devicePixelRatio, 2)
         );
 
         renderer.setSize(
@@ -94,9 +96,9 @@ export default function EllieAR() {
             renderer.domElement
         );
 
-        // -----------------------------------------
+        // =========================================
         // AR BUTTON
-        // -----------------------------------------
+        // =========================================
 
         const arButton = ARButton.createButton(
             renderer,
@@ -107,22 +109,23 @@ export default function EllieAR() {
 
         document.body.appendChild(arButton);
 
-        // -----------------------------------------
+        // =========================================
         // STORY ROOT
-        // -----------------------------------------
+        // =========================================
 
         storyRoot = new THREE.Group();
+
         storyRoot.visible = false;
 
         scene.add(storyRoot);
 
-        // -----------------------------------------
+        // =========================================
         // GLTF LOADER
-        // -----------------------------------------
+        // =========================================
 
         const loader = new GLTFLoader();
 
-        function loadModel(path) {
+        function loadGLB(path) {
             return new Promise((resolve, reject) => {
                 console.log("Loading:", path);
 
@@ -131,11 +134,11 @@ export default function EllieAR() {
 
                     (gltf) => {
                         console.log(
-                            "Loaded successfully:",
+                            "Loaded:",
                             path
                         );
 
-                        resolve(gltf.scene);
+                        resolve(gltf);
                     },
 
                     undefined,
@@ -153,141 +156,259 @@ export default function EllieAR() {
             });
         }
 
-        // -----------------------------------------
-        // LOAD ALL STORY SCENES
-        // -----------------------------------------
+        // =========================================
+        // LOAD ENVIRONMENT SCENES
+        // =========================================
 
-        async function loadStory() {
+        async function loadScenes() {
             try {
                 console.log(
-                    "Loading all story scenes..."
+                    "Loading Scene 1..."
                 );
 
-                // ---------------------------------
-                // SCENE 1
-                // ---------------------------------
-
-                scene1Model = await loadModel(
+                const gltf1 = await loadGLB(
                     "/models/Scene1.glb"
                 );
 
-                scene1Model.scale.setScalar(
-                    0.1
-                );
-
+                scene1Model = gltf1.scene;
+                scene1Model.scale.setScalar(0.1);
                 scene1Model.visible = true;
 
-                storyRoot.add(
-                    scene1Model
-                );
+                storyRoot.add(scene1Model);
+
+                // -----------------------------
 
                 console.log(
-                    "Scene 1 ready."
+                    "Loading Scene 2..."
                 );
 
-                // ---------------------------------
-                // SCENE 2
-                // ---------------------------------
-
-                scene2Model = await loadModel(
+                const gltf2 = await loadGLB(
                     "/models/Scene2.glb"
                 );
 
-                scene2Model.scale.setScalar(
-                    0.1
-                );
-
+                scene2Model = gltf2.scene;
+                scene2Model.scale.setScalar(0.1);
                 scene2Model.visible = false;
 
-                storyRoot.add(
-                    scene2Model
-                );
+                storyRoot.add(scene2Model);
+
+                // -----------------------------
 
                 console.log(
-                    "Scene 2 ready."
+                    "Loading Scene 3..."
                 );
 
-                // ---------------------------------
-                // SCENE 3
-                // ---------------------------------
-
-                scene3Model = await loadModel(
+                const gltf3 = await loadGLB(
                     "/models/Scene3.glb"
                 );
 
-                scene3Model.scale.setScalar(
-                    0.1
-                );
-
+                scene3Model = gltf3.scene;
+                scene3Model.scale.setScalar(0.1);
                 scene3Model.visible = false;
 
-                storyRoot.add(
-                    scene3Model
-                );
+                storyRoot.add(scene3Model);
+
+                // -----------------------------
 
                 console.log(
-                    "Scene 3 ready."
+                    "Loading Scene 4..."
                 );
 
-                // ---------------------------------
-                // SCENE 4
-                // ---------------------------------
-
-                scene4Model = await loadModel(
+                const gltf4 = await loadGLB(
                     "/models/Scene4.glb"
                 );
 
-                scene4Model.scale.setScalar(
-                    0.1
-                );
-
+                scene4Model = gltf4.scene;
+                scene4Model.scale.setScalar(0.1);
                 scene4Model.visible = false;
 
-                storyRoot.add(
-                    scene4Model
-                );
+                storyRoot.add(scene4Model);
+
+                // -----------------------------
+
+                scenesReady = true;
 
                 console.log(
-                    "Scene 4 ready."
-                );
-
-                // ---------------------------------
-                // READY
-                // ---------------------------------
-
-                modelsReady = true;
-
-                console.log(
-                    "ALL 4 SCENES READY FOR AR"
+                    "ALL ENVIRONMENT SCENES READY"
                 );
             }
             catch (error) {
                 console.error(
-                    "STORY LOAD FAILED:",
+                    "Environment loading failed:",
                     error
                 );
             }
         }
 
-        loadStory();
+        // =========================================
+        // LOAD ELLIE SEPARATELY
+        // =========================================
 
-        // -----------------------------------------
+        async function loadEllie() {
+            try {
+                console.log(
+                    "Loading Ellie separately..."
+                );
+
+                const ellieGLB = await loadGLB(
+                    "/models/Ellie.glb"
+                );
+
+                ellieModel = ellieGLB.scene;
+
+                // We'll tune these after seeing her.
+                ellieModel.scale.setScalar(0.1);
+
+                ellieModel.position.set(
+                    0,
+                    0,
+                    0
+                );
+
+                ellieModel.rotation.set(
+                    0,
+                    0,
+                    0
+                );
+
+                storyRoot.add(
+                    ellieModel
+                );
+
+                // ---------------------------------
+                // ANIMATIONS
+                // ---------------------------------
+
+                if (
+                    ellieGLB.animations &&
+                    ellieGLB.animations.length > 0
+                ) {
+                    console.log(
+                        "Ellie animations:",
+                        ellieGLB.animations.map(
+                            (clip) => clip.name
+                        )
+                    );
+
+                    ellieMixer =
+                        new THREE.AnimationMixer(
+                            ellieModel
+                        );
+
+                    // For now use first animation.
+                    ellieWalkAction =
+                        ellieMixer.clipAction(
+                            ellieGLB.animations[0]
+                        );
+
+                    ellieWalkAction.setLoop(
+                        THREE.LoopRepeat,
+                        Infinity
+                    );
+
+                    ellieWalkAction.play();
+
+                    // Ellie should stand still for intro.
+                    ellieWalkAction.paused = true;
+
+                    console.log(
+                        "Ellie animation prepared."
+                    );
+                }
+                else {
+                    console.warn(
+                        "Ellie loaded but NO animation was found."
+                    );
+                }
+
+                ellieReady = true;
+
+                console.log(
+                    "ELLIE READY"
+                );
+            }
+            catch (error) {
+                // IMPORTANT:
+                // This does NOT stop the environment.
+                console.error(
+                    "ELLIE FAILED TO LOAD."
+                );
+
+                console.error(error);
+
+                ellieReady = false;
+            }
+        }
+
+        loadScenes();
+        loadEllie();
+
+        // =========================================
+        // AUDIO
+        // =========================================
+
+        function playVoice(number, onFinished = null) {
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+            }
+
+            currentAudio = new Audio(
+                `/audio/${number}.mp3`
+            );
+
+            currentAudio.preload = "auto";
+
+            currentAudio.onended = () => {
+                console.log(
+                    `Voice ${number} finished.`
+                );
+
+                if (onFinished) {
+                    onFinished();
+                }
+            };
+
+            currentAudio.onerror = () => {
+                console.error(
+                    `Could not load audio/${number}.mp3`
+                );
+            };
+
+            currentAudio
+                .play()
+                .then(() => {
+                    console.log(
+                        `Voice ${number} playing.`
+                    );
+                })
+                .catch((error) => {
+                    console.error(
+                        `Voice ${number} could not play:`,
+                        error
+                    );
+                });
+        }
+
+        // =========================================
         // RETICLE
-        // -----------------------------------------
+        // =========================================
 
-        const ringGeometry = new THREE.RingGeometry(
-            0.08,
-            0.1,
-            32
-        );
+        const ringGeometry =
+            new THREE.RingGeometry(
+                0.08,
+                0.1,
+                32
+            );
 
         ringGeometry.rotateX(
             -Math.PI / 2
         );
 
-        const ringMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffffff
-        });
+        const ringMaterial =
+            new THREE.MeshBasicMaterial({
+                color: 0xffffff
+            });
 
         reticle = new THREE.Mesh(
             ringGeometry,
@@ -299,9 +420,9 @@ export default function EllieAR() {
 
         scene.add(reticle);
 
-        // -----------------------------------------
-        // TAP TO PLACE
-        // -----------------------------------------
+        // =========================================
+        // PLACE STORY
+        // =========================================
 
         controller =
             renderer.xr.getController(0);
@@ -309,43 +430,23 @@ export default function EllieAR() {
         controller.addEventListener(
             "select",
             () => {
-                console.log(
-                    "AR select detected"
-                );
-
-                console.log(
-                    "reticle visible:",
-                    reticle.visible
-                );
-
-                console.log(
-                    "storyPlaced:",
-                    storyPlaced
-                );
-
-                console.log(
-                    "modelsReady:",
-                    modelsReady
-                );
-
                 if (!reticle.visible) {
-                    console.log(
-                        "Placement blocked: reticle not visible."
-                    );
                     return;
                 }
 
                 if (storyPlaced) {
-                    console.log(
-                        "Placement blocked: story already placed."
-                    );
                     return;
                 }
 
-                if (!modelsReady) {
+                // IMPORTANT:
+                // We ONLY require environment scenes.
+                // Ellie is not allowed to block placement.
+
+                if (!scenesReady) {
                     console.log(
-                        "Placement blocked: scenes not loaded."
+                        "Waiting for environment..."
                     );
+
                     return;
                 }
 
@@ -357,7 +458,6 @@ export default function EllieAR() {
                         reticle.matrix
                     );
 
-                // Place whole story.
                 storyRoot.position.copy(
                     placementPosition
                 );
@@ -368,45 +468,64 @@ export default function EllieAR() {
                     0
                 );
 
+                // ---------------------------------
+                // INITIAL STORY STATE
+                // ---------------------------------
+
+                scene1Model.visible = true;
+                scene2Model.visible = false;
+                scene3Model.visible = false;
+                scene4Model.visible = false;
+
                 storyRoot.visible = true;
-
-                // ---------------------------------
-                // ONLY SCENE 1 VISIBLE
-                // ---------------------------------
-
-                if (scene1Model) {
-                    scene1Model.visible = true;
-                }
-
-                if (scene2Model) {
-                    scene2Model.visible = false;
-                }
-
-                if (scene3Model) {
-                    scene3Model.visible = false;
-                }
-
-                if (scene4Model) {
-                    scene4Model.visible = false;
-                }
 
                 storyPlaced = true;
 
                 reticle.visible = false;
 
                 console.log(
-                    "STORY PLACED - SCENE 1 ONLY"
+                    "STORY PLACED"
+                );
+
+                console.log(
+                    "Ellie ready:",
+                    ellieReady
+                );
+
+                // ---------------------------------
+                // VOICE #1
+                // ---------------------------------
+
+                playVoice(
+                    1,
+
+                    () => {
+                        console.log(
+                            "INTRO COMPLETE"
+                        );
+
+                        // NEXT:
+                        // enable footprint interaction here.
+                    }
                 );
             }
         );
 
         scene.add(controller);
 
-        // -----------------------------------------
-        // WEBXR LOOP
-        // -----------------------------------------
+        // =========================================
+        // RENDER LOOP
+        // =========================================
 
         function render(timestamp, frame) {
+            const delta =
+                clock.getDelta();
+
+            // Update Ellie animation system.
+            if (ellieMixer) {
+                ellieMixer.update(delta);
+            }
+
             if (frame) {
                 const referenceSpace =
                     renderer.xr.getReferenceSpace();
@@ -415,7 +534,7 @@ export default function EllieAR() {
                     renderer.xr.getSession();
 
                 // ---------------------------------
-                // REQUEST HIT TEST
+                // HIT TEST SETUP
                 // ---------------------------------
 
                 if (!hitTestSourceRequested) {
@@ -425,9 +544,11 @@ export default function EllieAR() {
                         )
                         .then(
                             (viewerSpace) => {
-                                return session.requestHitTestSource({
-                                    space: viewerSpace
-                                });
+                                return session
+                                    .requestHitTestSource({
+                                        space:
+                                            viewerSpace
+                                    });
                             }
                         )
                         .then(
@@ -436,14 +557,14 @@ export default function EllieAR() {
                                     source;
 
                                 console.log(
-                                    "Hit test source ready."
+                                    "Hit test ready."
                                 );
                             }
                         )
                         .catch(
                             (error) => {
                                 console.error(
-                                    "Hit test source failed:",
+                                    "Hit test failed:",
                                     error
                                 );
                             }
@@ -455,21 +576,25 @@ export default function EllieAR() {
                             hitTestSourceRequested =
                                 false;
 
-                            hitTestSource =
-                                null;
+                            hitTestSource = null;
 
-                            storyPlaced =
-                                false;
+                            storyPlaced = false;
 
                             if (storyRoot) {
                                 storyRoot.visible =
                                     false;
                             }
+
+                            if (currentAudio) {
+                                currentAudio.pause();
+
+                                currentAudio.currentTime =
+                                    0;
+                            }
                         }
                     );
 
-                    hitTestSourceRequested =
-                        true;
+                    hitTestSourceRequested = true;
                 }
 
                 // ---------------------------------
@@ -522,9 +647,9 @@ export default function EllieAR() {
             render
         );
 
-        // -----------------------------------------
+        // =========================================
         // RESIZE
-        // -----------------------------------------
+        // =========================================
 
         function onResize() {
             camera.aspect =
@@ -544,9 +669,9 @@ export default function EllieAR() {
             onResize
         );
 
-        // -----------------------------------------
+        // =========================================
         // CLEANUP
-        // -----------------------------------------
+        // =========================================
 
         return () => {
             window.removeEventListener(
@@ -557,6 +682,10 @@ export default function EllieAR() {
             renderer.setAnimationLoop(
                 null
             );
+
+            if (currentAudio) {
+                currentAudio.pause();
+            }
 
             if (
                 renderer.domElement &&
