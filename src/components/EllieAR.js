@@ -34,6 +34,13 @@ export default function EllieAR() {
 
         const TAP_DEBOUNCE_MS = 350;
 
+        let waterMesh = null;
+        let waterBasePositions = null;
+
+        const WATER_WAVE_SPEED = 1.2;
+        const WATER_WAVE_HEIGHT = 0.018;
+        const WATER_WAVE_SIZE = 2.5;
+
         // ============================================================
         // THREE / WEBXR
         // ============================================================
@@ -59,6 +66,9 @@ export default function EllieAR() {
         let scene2Model = null;
         let scene3Model = null;
         let scene4Model = null;
+
+        scene4Model.position.x -= 0.08;
+        scene4Model.position.z += 0.05;
 
         // ============================================================
         // ELLIE
@@ -286,6 +296,128 @@ export default function EllieAR() {
         // ============================================================
         // HELPERS
         // ============================================================
+
+        // ============================================================
+        // SETUP WATER
+        // ============================================================
+
+        function setupWater() {
+
+            if (!scene3Model) {
+                return;
+            }
+
+            waterMesh =
+                findExactMesh(
+                    scene3Model,
+                    "WaterBlock_50m"
+                ) ||
+                findExactMesh(
+                    scene3Model,
+                    "WaterBlock50m"
+                );
+
+            if (!waterMesh) {
+
+                // Fallback in case Blender changed the mesh name slightly.
+                scene3Model.traverse((child) => {
+
+                    if (
+                        waterMesh ||
+                        !child.isMesh
+                    ) {
+                        return;
+                    }
+
+                    const name =
+                        normalizeName(
+                            child.name
+                        );
+
+                    if (
+                        name.includes(
+                            "waterblock50m"
+                        )
+                    ) {
+                        waterMesh = child;
+                    }
+                });
+            }
+
+            if (!waterMesh) {
+
+                console.warn(
+                    "WaterBlock_50m NOT FOUND"
+                );
+
+                return;
+            }
+
+            console.log(
+                "WATER FOUND:",
+                waterMesh.name
+            );
+
+            // ------------------------------------------------------------
+            // BLUE WATER MATERIAL
+            // ------------------------------------------------------------
+
+            waterMesh.material =
+                new THREE.MeshPhysicalMaterial({
+
+                    // Pleasant child-friendly blue
+                    color: new THREE.Color(
+                        "#2d9fe8"
+                    ),
+
+                    transparent: true,
+
+                    opacity: 0.82,
+
+                    // Smooth reflections
+                    roughness: 0.22,
+
+                    metalness: 0.0,
+
+                    // Gives it a slightly glass/water-like surface
+                    transmission: 0.08,
+
+                    thickness: 0.1,
+
+                    clearcoat: 0.6,
+
+                    clearcoatRoughness: 0.25,
+
+                    side: THREE.DoubleSide
+                });
+
+            waterMesh.material.needsUpdate =
+                true;
+
+            // ------------------------------------------------------------
+            // SAVE ORIGINAL VERTEX POSITIONS
+            // ------------------------------------------------------------
+
+            const positionAttribute =
+                waterMesh.geometry?.attributes?.position;
+
+            if (positionAttribute) {
+
+                waterBasePositions =
+                    new Float32Array(
+                        positionAttribute.array
+                    );
+
+                // Required because we're changing vertices every frame.
+                positionAttribute.setUsage(
+                    THREE.DynamicDrawUsage
+                );
+            }
+
+            console.log(
+                "WATER MATERIAL + ANIMATION READY"
+            );
+        }
 
         function normalizeName(name) {
 
@@ -829,6 +961,7 @@ export default function EllieAR() {
                     scene3Model
                 );
 
+                setupWater();
                 // ====================================================
                 // SOURCE LOGS
                 // ====================================================
@@ -1046,6 +1179,10 @@ export default function EllieAR() {
                 // SCENE 4
                 // ====================================================
 
+                // ====================================================
+                // SCENE 4
+                // ====================================================
+
                 const gltf4 =
                     await loadGLB(
                         "/models/Scene4.glb"
@@ -1083,8 +1220,16 @@ export default function EllieAR() {
                         "EndTarget"
                     );
 
-                // Connect reunion scene to bridge.
-                alignScene4ToScene3();
+                scene4Model.position.x -= 0.08;
+                scene4Model.position.z += 0.05;
+
+                storyRoot.updateMatrixWorld(
+                    true
+                );
+
+                console.log(
+                    "SCENE 4 NUDGED SLIGHTLY CLOSER"
+                );
 
                 scenesReady =
                     true;
@@ -1321,6 +1466,87 @@ export default function EllieAR() {
                 ),
                 speed
             );
+        }
+        // ============================================================
+        // ANIMATE WATER
+        // ============================================================
+
+        function updateWater(time) {
+
+            if (
+                !waterMesh ||
+                !waterBasePositions
+            ) {
+                return;
+            }
+
+            const position =
+                waterMesh.geometry
+                    .attributes
+                    .position;
+
+            if (!position) {
+                return;
+            }
+
+            for (
+                let i = 0;
+                i < position.count;
+                i++
+            ) {
+
+                const index =
+                    i * 3;
+
+                const originalX =
+                    waterBasePositions[
+                        index
+                    ];
+
+                const originalY =
+                    waterBasePositions[
+                        index + 1
+                    ];
+
+                const originalZ =
+                    waterBasePositions[
+                        index + 2
+                    ];
+
+                // Two overlapping gentle waves.
+                // This prevents it looking like one rigid sine wave.
+
+                const wave1 =
+                    Math.sin(
+                        originalX *
+                        WATER_WAVE_SIZE +
+                        time *
+                        WATER_WAVE_SPEED
+                    );
+
+                const wave2 =
+                    Math.cos(
+                        originalZ *
+                        (WATER_WAVE_SIZE * 0.7) +
+                        time *
+                        (WATER_WAVE_SPEED * 0.75)
+                    );
+
+                const wave =
+                    (wave1 + wave2) *
+                    0.5 *
+                    WATER_WAVE_HEIGHT;
+
+                // Blender's water block appears to be a horizontal surface,
+                // so Y is our vertical movement in Three.js.
+                position.setY(
+                    i,
+                    originalY + wave
+                );
+            }
+
+            position.needsUpdate =
+                true;
         }
 
         function updateEllieMovement(
@@ -2268,6 +2494,10 @@ export default function EllieAR() {
 
             updateObjectMovement(
                 delta
+            );
+            
+            updateWater(
+                timestamp * 0.001
             );
 
             if (frame) {
