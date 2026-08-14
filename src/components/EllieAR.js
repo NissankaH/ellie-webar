@@ -14,28 +14,25 @@ export default function EllieAR() {
         // SETTINGS
         // ============================================================
 
-        const WORLD_SCALE = 2.85;
+        const WORLD_SCALE = 2.5;
 
-        // Scene 1 + Scene 2 - slow walking for young children
+        // Scene 1 + 2: very slow.
         const ELLIE_WALK_SPEED = 0.008;
 
-        // Scene 3 - slightly quicker for bridge building
-        const ELLIE_SCENE3_SPEED = 0.03;
+        // Scene 3: quicker because of repeated bridge trips.
+        const ELLIE_SCENE3_SPEED = 0.018;
 
         const ELLIE_ROTATION_OFFSET = -90;
 
-        // Scene 2 log movement
+        // Log movement timing.
         const LOG_LIFT_DURATION = 1.0;
         const LOG_SIDE_DURATION = 1.5;
+
         const LOG_LIFT_HEIGHT = 0.08;
 
-        // Scene 3 bridge logs
         const BRIDGE_LOG_MOVE_DURATION = 1.5;
 
         const TAP_DEBOUNCE_MS = 350;
-
-        // Water
-        let waterMesh = null;
 
         // ============================================================
         // THREE / WEBXR
@@ -62,10 +59,12 @@ export default function EllieAR() {
         let scene2Model = null;
         let scene3Model = null;
         let scene4Model = null;
+        // ============================================================
+        // WATER
+        // ============================================================
 
-        // IMPORTANT:
-        // Do NOT move scene4Model here.
-        // It is still null at this point.
+        let waterMesh = null;
+        let waterMaterial = null;
 
         // ============================================================
         // ELLIE
@@ -249,7 +248,7 @@ export default function EllieAR() {
         );
 
         // ============================================================
-        // GLB LOADER
+        // LOADER
         // ============================================================
 
         const loader =
@@ -291,7 +290,7 @@ export default function EllieAR() {
         }
 
         // ============================================================
-        // NAME HELPER
+        // HELPERS
         // ============================================================
 
         function normalizeName(name) {
@@ -303,10 +302,6 @@ export default function EllieAR() {
                     ""
                 );
         }
-
-        // ============================================================
-        // FIND EXACT OBJECT
-        // ============================================================
 
         function findExact(
             root,
@@ -348,10 +343,6 @@ export default function EllieAR() {
 
             return found;
         }
-
-        // ============================================================
-        // FIND CONTAINING OBJECT
-        // ============================================================
 
         function findContaining(
             root,
@@ -396,10 +387,6 @@ export default function EllieAR() {
             return found;
         }
 
-        // ============================================================
-        // FIND EXACT MESH
-        // ============================================================
-
         function findExactMesh(
             root,
             wantedName
@@ -442,19 +429,15 @@ export default function EllieAR() {
             return found;
         }
 
-        // ============================================================
-        // WATER
-        //
-        // IMPORTANT:
-        // Material only.
-        // We are NOT modifying geometry vertices anymore.
-        // ============================================================
-
         function setupWater() {
 
             if (!scene3Model) {
                 return;
             }
+
+            // ------------------------------------------------------------
+            // FIND WaterBlock_50m
+            // ------------------------------------------------------------
 
             waterMesh =
                 findExactMesh(
@@ -466,7 +449,6 @@ export default function EllieAR() {
                     "WaterBlock50m"
                 );
 
-            // Fallback in case Blender slightly changed the name
             if (!waterMesh) {
 
                 scene3Model.traverse(
@@ -511,44 +493,144 @@ export default function EllieAR() {
                 waterMesh.name
             );
 
-            // --------------------------------------------------------
-            // SAFE WEBAR WATER MATERIAL
-            // --------------------------------------------------------
+            // ------------------------------------------------------------
+            // ANIMATED WATER SHADER
+            // ------------------------------------------------------------
 
-            waterMesh.material =
-                new THREE.MeshStandardMaterial({
-
-                    // Friendly bright river blue
-                    color:
-                        0x2d9fe8,
+            waterMaterial =
+                new THREE.ShaderMaterial({
 
                     transparent:
                         true,
 
-                    opacity:
-                        0.82,
-
-                    // Slightly shiny
-                    roughness:
-                        0.25,
-
-                    metalness:
-                        0.0,
+                    depthWrite:
+                        true,
 
                     side:
-                        THREE.DoubleSide
+                        THREE.DoubleSide,
+
+                    uniforms: {
+
+                        uTime: {
+                            value: 0
+                        },
+
+                        uBlueDeep: {
+                            value:
+                                new THREE.Color(
+                                    0x1976c9
+                                )
+                        },
+
+                        uBlueLight: {
+                            value:
+                                new THREE.Color(
+                                    0x55c8ff
+                                )
+                        }
+                    },
+
+                    vertexShader: `
+                        varying vec3 vLocalPosition;
+
+                        void main() {
+
+                            vLocalPosition = position;
+
+                            gl_Position =
+                                projectionMatrix *
+                                modelViewMatrix *
+                                vec4(
+                                    position,
+                                    1.0
+                                );
+                        }
+                    `,
+
+                    fragmentShader: `
+                        uniform float uTime;
+
+                        uniform vec3 uBlueDeep;
+                        uniform vec3 uBlueLight;
+
+                        varying vec3 vLocalPosition;
+
+                        void main() {
+
+                            float wave1 =
+                                sin(
+                                    vLocalPosition.x * 2.5 +
+                                    uTime * 1.4
+                                );
+
+                            float wave2 =
+                                sin(
+                                    vLocalPosition.z * 3.2 -
+                                    uTime * 1.0
+                                );
+
+                            float wave3 =
+                                sin(
+                                    (
+                                        vLocalPosition.x +
+                                        vLocalPosition.z
+                                    ) * 1.6 +
+                                    uTime * 0.7
+                                );
+
+                            float waves =
+                                (
+                                    wave1 +
+                                    wave2 +
+                                    wave3
+                                ) / 3.0;
+
+                            waves =
+                                waves * 0.5 +
+                                0.5;
+
+                            vec3 waterColor =
+                                mix(
+                                    uBlueDeep,
+                                    uBlueLight,
+                                    waves * 0.55
+                                );
+
+                            // Occasional soft highlights
+                            float highlight =
+                                smoothstep(
+                                    0.72,
+                                    1.0,
+                                    waves
+                                );
+
+                            waterColor +=
+                                vec3(
+                                    0.12,
+                                    0.18,
+                                    0.22
+                                ) *
+                                highlight;
+
+                            gl_FragColor =
+                                vec4(
+                                    waterColor,
+                                    0.82
+                                );
+                        }
+                    `
                 });
+
+            waterMesh.material =
+                waterMaterial;
 
             waterMesh.material.needsUpdate =
                 true;
 
             console.log(
-                "BLUE WATER MATERIAL READY"
+                "ANIMATED WATER READY"
             );
         }
-                // ============================================================
-        // WORLD POSITION
-        // ============================================================
 
         function getWorldPosition(
             object
@@ -567,10 +649,6 @@ export default function EllieAR() {
 
             return world;
         }
-
-        // ============================================================
-        // MESH CENTER WORLD POSITION
-        // ============================================================
 
         function getMeshCenterWorld(
             object
@@ -606,10 +684,6 @@ export default function EllieAR() {
             );
         }
 
-        // ============================================================
-        // MOVEMENT SAFETY
-        // ============================================================
-
         function isUnsafeMovementObject(
             object
         ) {
@@ -624,10 +698,6 @@ export default function EllieAR() {
             );
         }
 
-        // ============================================================
-        // WAIT
-        // ============================================================
-
         function wait(ms) {
 
             return new Promise(
@@ -641,11 +711,6 @@ export default function EllieAR() {
 
         // ============================================================
         // ALIGN SCENE 3 TO SCENE 2
-        //
-        // Scene2 hidden footp4 is the end of Scene2.
-        // BridgeStartTarget is the beginning of Scene3.
-        //
-        // Move the WHOLE Scene3 so the environments connect.
         // ============================================================
 
         function alignScene3ToScene2() {
@@ -653,19 +718,11 @@ export default function EllieAR() {
             if (
                 !scene2Footp4Target ||
                 !bridgeStartTarget ||
-                !scene3Model ||
-                !storyRoot
+                !scene3Model
             ) {
 
                 console.warn(
-                    "SCENE 3 ALIGNMENT TARGETS MISSING",
-                    {
-                        scene2End:
-                            scene2Footp4Target?.name,
-
-                        scene3Start:
-                            bridgeStartTarget?.name
-                    }
+                    "SCENE 3 ALIGNMENT TARGETS MISSING"
                 );
 
                 return;
@@ -675,50 +732,34 @@ export default function EllieAR() {
                 true
             );
 
-            // --------------------------------------------------------
-            // SCENE 2 END POSITION
-            // --------------------------------------------------------
-
-            const scene2EndWorld =
+            const scene2End =
                 new THREE.Vector3();
 
             scene2Footp4Target
                 .getWorldPosition(
-                    scene2EndWorld
+                    scene2End
                 );
 
-            // --------------------------------------------------------
-            // SCENE 3 START POSITION
-            // --------------------------------------------------------
-
-            const scene3StartWorld =
+            const scene3Start =
                 new THREE.Vector3();
 
             bridgeStartTarget
                 .getWorldPosition(
-                    scene3StartWorld
+                    scene3Start
                 );
-
-            // --------------------------------------------------------
-            // ALIGN X/Z ONLY
-            //
-            // Preserve Scene3's own height.
-            // --------------------------------------------------------
 
             const desiredWorld =
                 new THREE.Vector3(
-                    scene2EndWorld.x,
-                    scene3StartWorld.y,
-                    scene2EndWorld.z
+                    scene2End.x,
+                    scene3Start.y,
+                    scene2End.z
                 );
 
-            // Current Scene3 target in StoryRoot local coordinates
             const currentLocal =
                 storyRoot.worldToLocal(
-                    scene3StartWorld.clone()
+                    scene3Start.clone()
                 );
 
-            // Desired Scene3 target in StoryRoot local coordinates
             const desiredLocal =
                 storyRoot.worldToLocal(
                     desiredWorld.clone()
@@ -728,10 +769,6 @@ export default function EllieAR() {
                 desiredLocal.sub(
                     currentLocal
                 );
-
-            // --------------------------------------------------------
-            // MOVE ENTIRE SCENE 3
-            // --------------------------------------------------------
 
             scene3Model.position.add(
                 localOffset
@@ -745,11 +782,222 @@ export default function EllieAR() {
                 "SCENE 3 ALIGNED TO SCENE 2"
             );
         }
+        function closeScene4Gap() {
 
-        // ============================================================
-        // LOAD ENVIRONMENT
-        // ============================================================
+            if (
+                !scene3Model ||
+                !scene4Model ||
+                !storyRoot
+            ) {
 
+                console.warn(
+                    "SCENE 4 GAP FIX MISSING MODELS"
+                );
+
+                return;
+            }
+
+            storyRoot.updateMatrixWorld(
+                true
+            );
+
+            // ------------------------------------------------------------
+            // GET FULL WORLD BOUNDS
+            // ------------------------------------------------------------
+
+            const scene3Box =
+                new THREE.Box3()
+                    .setFromObject(
+                        scene3Model
+                    );
+
+            const scene4Box =
+                new THREE.Box3()
+                    .setFromObject(
+                        scene4Model
+                    );
+
+            if (
+                scene3Box.isEmpty() ||
+                scene4Box.isEmpty()
+            ) {
+
+                console.warn(
+                    "SCENE 4 GAP FIX FAILED - EMPTY BOUNDS"
+                );
+
+                return;
+            }
+
+            const scene3Center =
+                new THREE.Vector3();
+
+            const scene4Center =
+                new THREE.Vector3();
+
+            scene3Box.getCenter(
+                scene3Center
+            );
+
+            scene4Box.getCenter(
+                scene4Center
+            );
+
+            // ------------------------------------------------------------
+            // ORIGINAL DIRECTION FROM SCENE 3 -> SCENE 4
+            // ------------------------------------------------------------
+
+            const direction =
+                scene4Center
+                    .clone()
+                    .sub(
+                        scene3Center
+                    );
+
+            direction.y =
+                0;
+
+            if (
+                direction.lengthSq() <
+                0.000001
+            ) {
+
+                console.warn(
+                    "SCENE 4 DIRECTION TOO SMALL"
+                );
+
+                return;
+            }
+
+            direction.normalize();
+
+            // ------------------------------------------------------------
+            // FIND EDGE OF EACH SCENE ALONG THAT DIRECTION
+            // ------------------------------------------------------------
+
+            const scene3Size =
+                new THREE.Vector3();
+
+            const scene4Size =
+                new THREE.Vector3();
+
+            scene3Box.getSize(
+                scene3Size
+            );
+
+            scene4Box.getSize(
+                scene4Size
+            );
+
+            const scene3Radius =
+                (
+                    Math.abs(direction.x) *
+                        scene3Size.x +
+                    Math.abs(direction.z) *
+                        scene3Size.z
+                ) * 0.5;
+
+            const scene4Radius =
+                (
+                    Math.abs(direction.x) *
+                        scene4Size.x +
+                    Math.abs(direction.z) *
+                        scene4Size.z
+                ) * 0.5;
+
+            const currentCenterDistance =
+                scene3Center.distanceTo(
+                    scene4Center
+                );
+
+            const currentGap =
+                currentCenterDistance -
+                scene3Radius -
+                scene4Radius;
+
+            // ------------------------------------------------------------
+            // DESIRED SMALL GAP
+            //
+            // World units.
+            // Adjust later if we want slightly more/less space.
+            // ------------------------------------------------------------
+
+            const DESIRED_GAP =
+                0.04;
+
+            const amountToClose =
+                Math.max(
+                    0,
+                    currentGap -
+                    DESIRED_GAP
+                );
+
+            if (
+                amountToClose <=
+                0
+            ) {
+
+                console.log(
+                    "SCENE 4 ALREADY CLOSE ENOUGH"
+                );
+
+                return;
+            }
+
+            // World offset toward Scene3.
+            const worldMove =
+                direction
+                    .clone()
+                    .multiplyScalar(
+                        -amountToClose
+                    );
+
+            // Convert world movement to storyRoot local movement.
+            const worldOrigin =
+                new THREE.Vector3(
+                    0,
+                    0,
+                    0
+                );
+
+            const localOrigin =
+                storyRoot.worldToLocal(
+                    worldOrigin.clone()
+                );
+
+            const localMovePoint =
+                storyRoot.worldToLocal(
+                    worldMove.clone()
+                );
+
+            const localMove =
+                localMovePoint.sub(
+                    localOrigin
+                );
+
+            // ------------------------------------------------------------
+            // MOVE WHOLE SCENE 4 CLOSER
+            // ------------------------------------------------------------
+
+            scene4Model.position.add(
+                localMove
+            );
+
+            storyRoot.updateMatrixWorld(
+                true
+            );
+
+            console.log(
+                "SCENE 4 GAP CLOSED",
+                {
+                    oldGap:
+                        currentGap,
+
+                    newGap:
+                        DESIRED_GAP
+                }
+            );
+        }
         async function loadEnvironment() {
 
             try {
@@ -777,17 +1025,6 @@ export default function EllieAR() {
                     scene1Model
                 );
 
-                // ----------------------------------------------------
-                // FINAL FOOTPRINT
-                //
-                // Handles:
-                // footp__4__1
-                // footp_4_1
-                // etc.
-                //
-                // normalizeName -> footp41
-                // ----------------------------------------------------
-
                 scene1Model.traverse(
                     (child) => {
 
@@ -801,11 +1038,6 @@ export default function EllieAR() {
                                 child;
                         }
                     }
-                );
-
-                console.log(
-                    "SCENE 1 FINAL FOOTPRINT:",
-                    finalFootprintTarget?.name
                 );
 
                 // ====================================================
@@ -831,24 +1063,13 @@ export default function EllieAR() {
                     scene2Model
                 );
 
-                // ----------------------------------------------------
-                // HIDDEN FOOTP4
-                //
-                // Navigation target only.
-                // NEVER visible.
-                // ----------------------------------------------------
-
                 scene2Model.traverse(
                     (child) => {
 
-                        const name =
+                        if (
                             normalizeName(
                                 child.name
-                            );
-
-                        if (
-                            name ===
-                            "footp4"
+                            ) === "footp4"
                         ) {
 
                             if (
@@ -859,29 +1080,20 @@ export default function EllieAR() {
                                     child;
                             }
 
+                            // Navigation only.
                             child.visible =
                                 false;
                         }
                     }
                 );
 
-                console.log(
-                    "SCENE 2 HIDDEN FOOTP4:",
-                    scene2Footp4Target?.name
-                );
-
-                // ----------------------------------------------------
-                // ACTUAL LOG MESH
-                // ----------------------------------------------------
-
+                // Actual log mesh.
                 logLiftObject =
                     findExactMesh(
                         scene2Model,
                         "Log_Lift"
                     );
 
-                // Fallback:
-                // ONLY allow a mesh.
                 if (!logLiftObject) {
 
                     scene2Model.traverse(
@@ -891,7 +1103,6 @@ export default function EllieAR() {
                                 logLiftObject ||
                                 !child.isMesh
                             ) {
-
                                 return;
                             }
 
@@ -916,10 +1127,6 @@ export default function EllieAR() {
                     );
                 }
 
-                // ----------------------------------------------------
-                // ELLIE STANDS HERE DURING LOG ACTION
-                // ----------------------------------------------------
-
                 logLiftTarget =
                     findExact(
                         scene2Model,
@@ -930,10 +1137,6 @@ export default function EllieAR() {
                         "logLiftTarget"
                     );
 
-                // ----------------------------------------------------
-                // LOG ENDS HERE
-                // ----------------------------------------------------
-
                 logSideTarget =
                     findExact(
                         scene2Model,
@@ -943,21 +1146,6 @@ export default function EllieAR() {
                         scene2Model,
                         "logSideTarget"
                     );
-
-                console.log(
-                    "ACTUAL LOG:",
-                    logLiftObject?.name
-                );
-
-                console.log(
-                    "LOG LIFT TARGET:",
-                    logLiftTarget?.name
-                );
-
-                console.log(
-                    "LOG SIDE TARGET:",
-                    logSideTarget?.name
-                );
 
                 // ====================================================
                 // SCENE 3
@@ -982,22 +1170,10 @@ export default function EllieAR() {
                     scene3Model
                 );
 
-                // ----------------------------------------------------
-                // SAFE WATER MATERIAL
-                // ----------------------------------------------------
-
                 setupWater();
-
                 // ====================================================
                 // SOURCE LOGS
-                //
-                // Logs Ellie carries:
-                // log
-                // log_1
-                // log_2
                 // ====================================================
-
-                sourceLogs = [];
 
                 const sourceParent =
                     findExact(
@@ -1008,6 +1184,8 @@ export default function EllieAR() {
                         scene3Model,
                         "SourceLogs"
                     );
+
+                sourceLogs = [];
 
                 if (sourceParent) {
 
@@ -1043,7 +1221,6 @@ export default function EllieAR() {
                     );
                 }
 
-                // Keep logs in correct order.
                 sourceLogs.sort(
                     (a, b) => {
 
@@ -1068,23 +1245,9 @@ export default function EllieAR() {
                     }
                 );
 
-                console.log(
-                    "SOURCE LOGS:",
-                    sourceLogs.map(
-                        (log) =>
-                            log.name
-                    )
-                );
-
                 // ====================================================
-                // FINISHED BRIDGE LOGS
-                //
-                // log_3
-                // log_4
-                // log_5
+                // BRIDGE LOGS
                 // ====================================================
-
-                bridgeLogs = [];
 
                 const bridgeParent =
                     findExact(
@@ -1095,6 +1258,8 @@ export default function EllieAR() {
                         scene3Model,
                         "BridgeLogs"
                     );
+
+                bridgeLogs = [];
 
                 if (bridgeParent) {
 
@@ -1154,21 +1319,12 @@ export default function EllieAR() {
                     }
                 );
 
-                // Finished bridge logs hidden initially.
                 bridgeLogs.forEach(
                     (log) => {
 
                         log.visible =
                             false;
                     }
-                );
-
-                console.log(
-                    "BRIDGE LOGS:",
-                    bridgeLogs.map(
-                        (log) =>
-                            log.name
-                    )
                 );
 
                 // ====================================================
@@ -1225,35 +1381,7 @@ export default function EllieAR() {
                         "ReturnTarget"
                     );
 
-                console.log(
-                    "BRIDGE START TARGET:",
-                    bridgeStartTarget?.name
-                );
-
-                console.log(
-                    "BRIDGE PLACE TARGET:",
-                    bridgePlaceTarget?.name
-                );
-
-                console.log(
-                    "LOG PILE TARGET:",
-                    logPileTarget?.name
-                );
-
-                console.log(
-                    "RIVER TARGET:",
-                    riverTarget?.name
-                );
-
-                console.log(
-                    "RETURN TARGET:",
-                    returnTarget?.name
-                );
-
-                // ====================================================
-                // CONNECT SCENE 3 TO SCENE 2
-                // ====================================================
-
+                // Connect Scene 3 to Scene 2.
                 alignScene3ToScene2();
 
                 // ====================================================
@@ -1279,10 +1407,6 @@ export default function EllieAR() {
                     scene4Model
                 );
 
-                // ----------------------------------------------------
-                // FINAL / MOTHER TARGET
-                // ----------------------------------------------------
-
                 finalTarget =
                     findExact(
                         scene4Model,
@@ -1301,38 +1425,8 @@ export default function EllieAR() {
                         "EndTarget"
                     );
 
-                // ====================================================
-                // SMALL SCENE 4 NUDGE ONLY
-                //
-                // IMPORTANT:
-                // Keep Scene4's authored position.
-                // Do NOT align it to the bridge.
-                //
-                // This only closes the small gap slightly.
-                // ====================================================
-
-                scene4Model.position.x -=
-                    0.08;
-
-                scene4Model.position.z +=
-                    0.05;
-
-                storyRoot.updateMatrixWorld(
-                    true
-                );
-
-                console.log(
-                    "SCENE 4 NUDGED SLIGHTLY CLOSER"
-                );
-
-                console.log(
-                    "FINAL TARGET:",
-                    finalTarget?.name
-                );
-
-                // ====================================================
-                // READY
-                // ====================================================
+                // Connect reunion scene to bridge.
+                closeScene4Gap();
 
                 scenesReady =
                     true;
@@ -1376,19 +1470,9 @@ export default function EllieAR() {
                     0
                 );
 
-                ellieModel.rotation.set(
-                    0,
-                    0,
-                    0
-                );
-
                 storyRoot.add(
                     ellieModel
                 );
-
-                // ----------------------------------------------------
-                // WALK ANIMATION
-                // ----------------------------------------------------
 
                 if (
                     gltf.animations &&
@@ -1412,14 +1496,9 @@ export default function EllieAR() {
 
                     ellieWalkAction.play();
 
-                    // Start paused.
                     ellieWalkAction.paused =
                         true;
                 }
-
-                console.log(
-                    "ELLIE READY"
-                );
             }
             catch (error) {
 
@@ -1430,13 +1509,10 @@ export default function EllieAR() {
             }
         }
 
-        // ============================================================
-        // START LOADING
-        // ============================================================
-
         loadEnvironment();
         loadEllie();
-                // ============================================================
+
+        // ============================================================
         // AUDIO
         // ============================================================
 
@@ -1445,7 +1521,6 @@ export default function EllieAR() {
             return new Promise(
                 (resolve) => {
 
-                    // Stop previous voice before starting next one.
                     if (
                         currentAudio &&
                         !currentAudio.ended
@@ -1468,19 +1543,11 @@ export default function EllieAR() {
                     currentAudio.onended =
                         () => {
 
-                            console.log(
-                                `VOICE ${number} FINISHED`
-                            );
-
                             resolve();
                         };
 
                     currentAudio.onerror =
                         () => {
-
-                            console.error(
-                                `VOICE ${number} FAILED`
-                            );
 
                             resolve();
                         };
@@ -1488,12 +1555,7 @@ export default function EllieAR() {
                     currentAudio
                         .play()
                         .catch(
-                            (error) => {
-
-                                console.warn(
-                                    `VOICE ${number} PLAY FAILED`,
-                                    error
-                                );
+                            () => {
 
                                 resolve();
                             }
@@ -1545,13 +1607,11 @@ export default function EllieAR() {
                         return;
                     }
 
-                    // Convert world target to StoryRoot local position.
                     const destination =
                         storyRoot.worldToLocal(
                             worldPosition.clone()
                         );
 
-                    // Keep Ellie on her current ground height.
                     destination.y =
                         ellieModel.position.y;
 
@@ -1594,10 +1654,6 @@ export default function EllieAR() {
 
             if (!target) {
 
-                console.warn(
-                    "ELLIE TARGET MISSING"
-                );
-
                 return Promise.resolve();
             }
 
@@ -1608,10 +1664,6 @@ export default function EllieAR() {
                 speed
             );
         }
-
-        // ============================================================
-        // UPDATE ELLIE MOVEMENT
-        // ============================================================
 
         function updateEllieMovement(
             delta
@@ -1633,16 +1685,11 @@ export default function EllieAR() {
                         ellieModel.position
                     );
 
-            // Horizontal movement only.
             direction.y =
                 0;
 
             const distance =
                 direction.length();
-
-            // --------------------------------------------------------
-            // ARRIVED
-            // --------------------------------------------------------
 
             if (
                 distance <=
@@ -1670,10 +1717,6 @@ export default function EllieAR() {
                 return;
             }
 
-            // --------------------------------------------------------
-            // FACE WALKING DIRECTION
-            // --------------------------------------------------------
-
             const angle =
                 Math.atan2(
                     direction.x,
@@ -1686,10 +1729,6 @@ export default function EllieAR() {
                     ELLIE_ROTATION_OFFSET
                 );
 
-            // --------------------------------------------------------
-            // MOVE
-            // --------------------------------------------------------
-
             const amount =
                 Math.min(
                     ellieMovement.speed *
@@ -1699,21 +1738,14 @@ export default function EllieAR() {
 
             direction.normalize();
 
-            ellieModel.position
-                .addScaledVector(
-                    direction,
-                    amount
-                );
+            ellieModel.position.addScaledVector(
+                direction,
+                amount
+            );
         }
 
         // ============================================================
-        // SAFE OBJECT MOVEMENT
-        //
-        // Used for:
-        // Scene 2 log
-        // Scene 3 bridge logs
-        //
-        // Duration-based so it cannot get stuck because of scale.
+        // OBJECT MOVEMENT
         // ============================================================
 
         function animateObjectToWorld(
@@ -1733,13 +1765,7 @@ export default function EllieAR() {
                         !object.parent
                     ) {
 
-                        console.warn(
-                            "OBJECT MOVEMENT SKIPPED:",
-                            object?.name
-                        );
-
                         resolve();
-
                         return;
                     }
 
@@ -1772,11 +1798,6 @@ export default function EllieAR() {
                         resolve:
                             resolve
                     };
-
-                    console.log(
-                        "OBJECT MOVEMENT START:",
-                        object.name
-                    );
                 }
             );
         }
@@ -1789,10 +1810,6 @@ export default function EllieAR() {
 
             if (!target) {
 
-                console.warn(
-                    "OBJECT TARGET MISSING"
-                );
-
                 return Promise.resolve();
             }
 
@@ -1804,10 +1821,6 @@ export default function EllieAR() {
                 duration
             );
         }
-
-        // ============================================================
-        // UPDATE OBJECT MOVEMENT
-        // ============================================================
 
         function updateObjectMovement(
             delta
@@ -1854,16 +1867,14 @@ export default function EllieAR() {
                     1
                 );
 
-            // Smooth ease in/out.
             const eased =
                 t * t * (3 - 2 * t);
 
-            object.position
-                .lerpVectors(
-                    movement.start,
-                    movement.destination,
-                    eased
-                );
+            object.position.lerpVectors(
+                movement.start,
+                movement.destination,
+                eased
+            );
 
             if (
                 t >= 1
@@ -1876,11 +1887,6 @@ export default function EllieAR() {
                 const finish =
                     movement.resolve;
 
-                console.log(
-                    "OBJECT MOVEMENT COMPLETE:",
-                    object.name
-                );
-
                 objectMovement =
                     null;
 
@@ -1888,21 +1894,14 @@ export default function EllieAR() {
             }
         }
 
-        // ============================================================
-        // MOVEMENT FAILSAFE
-        //
-        // If something weird happens with a GLB object,
-        // the story still continues.
-        // ============================================================
-
         async function safeObjectAction(
-            actionPromise,
+            action,
             timeout
         ) {
 
             await Promise.race([
 
-                actionPromise,
+                action,
 
                 wait(
                     timeout
@@ -1926,10 +1925,8 @@ export default function EllieAR() {
             storyStage =
                 "INTRO";
 
-            // Audio 1
             await playVoice(1);
 
-            // After intro, child can tap screen.
             storyStage =
                 "FOOTPRINTS";
 
@@ -1938,20 +1935,10 @@ export default function EllieAR() {
 
             sequenceRunning =
                 false;
-
-            console.log(
-                "INTRO COMPLETE - READY FOR FIRST TAP"
-            );
         }
 
         // ============================================================
         // SCENE 1
-        //
-        // Tap screen
-        // -> Audio 2
-        // -> Ellie slowly walks to final footprint
-        // -> Scene 2 appears
-        // -> Audio 3
         // ============================================================
 
         async function runScene1() {
@@ -1966,17 +1953,10 @@ export default function EllieAR() {
             interactionLocked =
                 true;
 
-            storyStage =
-                "SCENE1_WALK";
-
             const finalWorld =
                 getMeshCenterWorld(
                     finalFootprintTarget
                 );
-
-            // --------------------------------------------------------
-            // AUDIO 2 + ELLIE WALK TOGETHER
-            // --------------------------------------------------------
 
             await Promise.all([
 
@@ -1991,30 +1971,17 @@ export default function EllieAR() {
 
             stopWalk();
 
-            // --------------------------------------------------------
-            // SHOW SCENE 2
-            // --------------------------------------------------------
+            scene2Model.visible =
+                true;
 
-            if (scene2Model) {
-
-                scene2Model.visible =
-                    true;
-            }
-
-            // Hidden target must remain hidden.
             if (scene2Footp4Target) {
 
                 scene2Footp4Target.visible =
                     false;
             }
 
-            // --------------------------------------------------------
-            // AUDIO 3
-            // --------------------------------------------------------
-
             await playVoice(3);
 
-            // Child can now tap to interact with log.
             storyStage =
                 "LOG";
 
@@ -2023,24 +1990,10 @@ export default function EllieAR() {
 
             sequenceRunning =
                 false;
-
-            console.log(
-                "SCENE 1 COMPLETE - LOG READY"
-            );
         }
 
         // ============================================================
         // SCENE 2
-        //
-        // Tap
-        // -> Audio 4
-        // -> Ellie walks to logLiftTarget
-        // -> log rises
-        // -> log moves to logSideTarget
-        // -> Scene 3 appears
-        // -> Audio 5 + Ellie walk to river TOGETHER
-        // -> Audio 6
-        // -> bridge interaction unlocked
         // ============================================================
 
         async function runScene2() {
@@ -2058,39 +2011,19 @@ export default function EllieAR() {
             storyStage =
                 "LOG_ACTION";
 
-            console.log(
-                "SCENE 2 LOG SEQUENCE START"
-            );
-
-            // --------------------------------------------------------
-            // AUDIO 4
-            //
-            // Start it immediately.
-            // Ellie can move while it is playing.
-            // --------------------------------------------------------
-
+            // Voice 4.
             const voice4 =
                 playVoice(4);
 
-            // --------------------------------------------------------
-            // 1. ELLIE -> LOG LIFT TARGET
-            // --------------------------------------------------------
+            // ========================================================
+            // ELLIE -> LOG LIFT TARGET
+            // ========================================================
 
             if (logLiftTarget) {
-
-                console.log(
-                    "ELLIE -> logLiftTarget"
-                );
 
                 await moveEllieTo(
                     logLiftTarget,
                     ELLIE_WALK_SPEED
-                );
-            }
-            else {
-
-                console.warn(
-                    "logLiftTarget NOT FOUND"
                 );
             }
 
@@ -2098,9 +2031,9 @@ export default function EllieAR() {
 
             await wait(300);
 
-            // --------------------------------------------------------
-            // 2. LOG LIFTS UP
-            // --------------------------------------------------------
+            // ========================================================
+            // LOG RISES
+            // ========================================================
 
             if (
                 logLiftObject &&
@@ -2120,11 +2053,6 @@ export default function EllieAR() {
                 raisedWorld.y +=
                     LOG_LIFT_HEIGHT;
 
-                console.log(
-                    "LIFTING LOG:",
-                    logLiftObject.name
-                );
-
                 await safeObjectAction(
 
                     animateObjectToWorld(
@@ -2136,30 +2064,17 @@ export default function EllieAR() {
                     2000
                 );
             }
-            else {
-
-                console.warn(
-                    "VALID LOG_LIFT MESH NOT FOUND"
-                );
-            }
 
             await wait(400);
 
-            // --------------------------------------------------------
-            // 3. LOG -> LOG SIDE TARGET
-            // --------------------------------------------------------
+            // ========================================================
+            // LOG -> SIDE TARGET
+            // ========================================================
 
             if (
                 logLiftObject &&
-                logSideTarget &&
-                !isUnsafeMovementObject(
-                    logLiftObject
-                )
+                logSideTarget
             ) {
-
-                console.log(
-                    "LOG -> logSideTarget"
-                );
 
                 await safeObjectAction(
 
@@ -2172,80 +2087,48 @@ export default function EllieAR() {
                     2500
                 );
             }
-            else {
-
-                console.warn(
-                    "LOG SIDE MOVEMENT TARGET MISSING"
-                );
-            }
-
-            console.log(
-                "LOG PLACED"
-            );
 
             // ========================================================
-            // FINAL TIMING CHANGE
+            // FINAL CHANGE:
             //
-            // AS SOON AS THE LOG IS PLACED:
-            //
-            // Scene 3 appears
-            // Audio 5 starts
-            // Ellie starts walking toward the river
-            //
-            // Audio and movement happen together.
+            // AS SOON AS LOG IS PLACED:
+            // Scene 3 appears.
+            // Audio 5 starts.
+            // Ellie walks toward river at Scene3 speed.
             // ========================================================
 
-            if (scene3Model) {
-
-                scene3Model.visible =
-                    true;
-            }
+            scene3Model.visible =
+                true;
 
             console.log(
-                "SCENE 3 VISIBLE"
+                "LOG PLACED - SCENE 3 START"
             );
 
-            // --------------------------------------------------------
-            // AUDIO 5 + ELLIE -> RIVER
-            // --------------------------------------------------------
+            // Voice 4 shouldn't block this transition.
+            // Let it finish naturally in background.
 
-            if (riverTarget) {
+            // ========================================================
+            // AUDIO 5 + WALK TO RIVER TOGETHER
+            // ========================================================
 
-                await Promise.all([
+            await Promise.all([
 
-                    playVoice(5),
+                playVoice(5),
 
-                    moveEllieTo(
-                        riverTarget,
-                        ELLIE_SCENE3_SPEED
-                    )
+                moveEllieTo(
+                    riverTarget,
+                    ELLIE_SCENE3_SPEED
+                )
 
-                ]);
-            }
-            else {
-
-                console.warn(
-                    "RIVER TARGET MISSING"
-                );
-
-                await playVoice(5);
-            }
+            ]);
 
             stopWalk();
 
-            // We don't need Voice 4 to control progression anymore,
-            // but this prevents an unhandled promise.
-            void voice4;
-
-            // --------------------------------------------------------
+            // ========================================================
             // AUDIO 6
-            // --------------------------------------------------------
+            // ========================================================
 
             await playVoice(6);
-
-            // --------------------------------------------------------
-            // BRIDGE READY
-            // --------------------------------------------------------
 
             storyStage =
                 "BRIDGE";
@@ -2257,23 +2140,12 @@ export default function EllieAR() {
                 false;
 
             console.log(
-                "BRIDGE READY FOR TAP"
+                "BRIDGE READY"
             );
         }
 
         // ============================================================
-        // SCENE 3 - BUILD ONE BRIDGE LOG
-        //
-        // Each tap:
-        //
-        // Ellie -> bridge start
-        // Ellie -> log pile
-        // Ellie + one source log -> bridge
-        // source log hides
-        // finished bridge log appears
-        // Ellie returns
-        //
-        // Repeat 3 times.
+        // SCENE 3 - BRIDGE
         // ============================================================
 
         async function buildBridgeLog() {
@@ -2302,14 +2174,9 @@ export default function EllieAR() {
                     bridgeLogIndex
                 ];
 
-            console.log(
-                "BUILDING BRIDGE LOG:",
-                bridgeLogIndex + 1
-            );
-
-            // --------------------------------------------------------
-            // 1. ELLIE -> BRIDGE START
-            // --------------------------------------------------------
+            // ========================================================
+            // ELLIE -> BRIDGE START
+            // ========================================================
 
             if (bridgeStartTarget) {
 
@@ -2319,9 +2186,9 @@ export default function EllieAR() {
                 );
             }
 
-            // --------------------------------------------------------
-            // 2. ELLIE -> LOG PILE
-            // --------------------------------------------------------
+            // ========================================================
+            // ELLIE -> LOG PILE
+            // ========================================================
 
             if (logPileTarget) {
 
@@ -2331,17 +2198,17 @@ export default function EllieAR() {
                 );
             }
 
-            // --------------------------------------------------------
-            // 3. LOG + ELLIE MOVE TO BRIDGE TOGETHER
-            // --------------------------------------------------------
+            // ========================================================
+            // ELLIE + SOURCE LOG -> BRIDGE
+            // ========================================================
 
             let logPromise =
                 Promise.resolve();
 
             if (
                 sourceLog &&
-                sourceLog.isMesh &&
-                bridgePlaceTarget
+                bridgePlaceTarget &&
+                sourceLog.isMesh
             ) {
 
                 logPromise =
@@ -2370,19 +2237,11 @@ export default function EllieAR() {
             }
 
             await Promise.all([
-
                 logPromise,
-
                 elliePromise
-
             ]);
 
-            stopWalk();
-
-            // --------------------------------------------------------
-            // 4. SWAP SOURCE LOG -> FINISHED BRIDGE LOG
-            // --------------------------------------------------------
-
+            // Replace source log with finished bridge log.
             if (sourceLog) {
 
                 sourceLog.visible =
@@ -2397,14 +2256,8 @@ export default function EllieAR() {
 
             bridgeLogIndex++;
 
-            console.log(
-                "BRIDGE LOG COMPLETE:",
-                bridgeLogIndex,
-                "/ 3"
-            );
-
             // ========================================================
-            // ALL THREE BRIDGE LOGS COMPLETE
+            // FULL BRIDGE COMPLETE
             // ========================================================
 
             if (
@@ -2419,44 +2272,25 @@ export default function EllieAR() {
 
                 stopWalk();
 
-                console.log(
-                    "FULL BRIDGE COMPLETE"
-                );
+                // ====================================================
+                // SHOW REUNION SCENE BESIDE BRIDGE
+                // ====================================================
 
-                // ----------------------------------------------------
-                // SHOW SCENE 4
-                //
-                // Scene 4 already has the SMALL manual nudge from
-                // Part 2. We DO NOT reposition it here.
-                // ----------------------------------------------------
-
-                if (scene4Model) {
-
-                    scene4Model.visible =
-                        true;
-                }
+                scene4Model.visible =
+                    true;
 
                 // ====================================================
-                // FINAL AUDIO TIMING
+                // EXACT REQUEST:
                 //
                 // Full bridge complete
-                // ↓
-                // wait exactly 1 second
-                // ↓
-                // Audio 7
-                // + Ellie walks toward mother
-                // ↓
-                // Audio 7 ends
-                // ↓
-                // Audio 8 immediately
+                // -> wait 1 second
+                // -> Audio 7
+                // -> Audio 8 immediately after
                 // ====================================================
 
                 await wait(1000);
 
-                // ----------------------------------------------------
-                // AUDIO 7 + ELLIE -> FINAL TARGET
-                // ----------------------------------------------------
-
+                // Audio 7 + Ellie approaches mother together.
                 if (finalTarget) {
 
                     await Promise.all([
@@ -2472,26 +2306,16 @@ export default function EllieAR() {
                 }
                 else {
 
-                    console.warn(
-                        "FINAL TARGET MISSING"
-                    );
-
                     await playVoice(7);
                 }
 
                 stopWalk();
 
-                // ----------------------------------------------------
-                // AUDIO 8 IMMEDIATELY AFTER AUDIO 7
-                // ----------------------------------------------------
-
+                // Final audio starts immediately.
                 await playVoice(8);
 
                 storyStage =
                     "COMPLETE";
-
-                interactionLocked =
-                    true;
 
                 sequenceRunning =
                     false;
@@ -2504,8 +2328,7 @@ export default function EllieAR() {
             }
 
             // ========================================================
-            // NOT FINISHED YET:
-            // RETURN ELLIE FOR NEXT BRIDGE LOG
+            // RETURN FOR NEXT LOG
             // ========================================================
 
             if (returnTarget) {
@@ -2527,16 +2350,505 @@ export default function EllieAR() {
 
             stopWalk();
 
-            // Child can tap again.
             interactionLocked =
                 false;
 
             sequenceRunning =
                 false;
+        }
 
-            console.log(
-                "READY FOR NEXT BRIDGE TAP"
+        // ============================================================
+        // STORY TAP
+        // ============================================================
+
+        function handleStoryTap() {
+
+            if (
+                !storyPlaced ||
+                interactionLocked ||
+                sequenceRunning
+            ) {
+
+                return;
+            }
+
+            const now =
+                performance.now();
+
+            if (
+                now - lastTapTime <
+                TAP_DEBOUNCE_MS
+            ) {
+
+                return;
+            }
+
+            lastTapTime =
+                now;
+
+            if (
+                storyStage ===
+                "FOOTPRINTS"
+            ) {
+
+                runScene1();
+
+                return;
+            }
+
+            if (
+                storyStage ===
+                "LOG"
+            ) {
+
+                runScene2();
+
+                return;
+            }
+
+            if (
+                storyStage ===
+                "BRIDGE"
+            ) {
+
+                buildBridgeLog();
+
+                return;
+            }
+        }
+
+        // ============================================================
+        // RETICLE
+        // ============================================================
+
+        const ringGeometry =
+            new THREE.RingGeometry(
+                0.08,
+                0.1,
+                32
+            );
+
+        ringGeometry.rotateX(
+            -Math.PI / 2
+        );
+
+        reticle =
+            new THREE.Mesh(
+                ringGeometry,
+                new THREE.MeshBasicMaterial({
+                    color:
+                        0xffffff
+                })
+            );
+
+        reticle.matrixAutoUpdate =
+            false;
+
+        reticle.visible =
+            false;
+
+        scene.add(
+            reticle
+        );
+
+        // ============================================================
+        // XR CONTROLLER
+        // ============================================================
+
+        controller =
+            renderer.xr.getController(0);
+
+        controller.addEventListener(
+            "select",
+            () => {
+
+                if (!storyPlaced) {
+
+                    if (
+                        !reticle.visible ||
+                        !scenesReady
+                    ) {
+
+                        return;
+                    }
+
+                    const placement =
+                        new THREE.Vector3();
+
+                    placement.setFromMatrixPosition(
+                        reticle.matrix
+                    );
+
+                    storyRoot.position.copy(
+                        placement
+                    );
+
+                    storyRoot.rotation.set(
+                        0,
+                        0,
+                        0
+                    );
+
+                    scene1Model.visible =
+                        true;
+
+                    scene2Model.visible =
+                        false;
+
+                    scene3Model.visible =
+                        false;
+
+                    scene4Model.visible =
+                        false;
+
+                    if (scene2Footp4Target) {
+
+                        scene2Footp4Target.visible =
+                            false;
+                    }
+
+                    sourceLogs.forEach(
+                        (log) => {
+
+                            log.visible =
+                                true;
+                        }
+                    );
+
+                    bridgeLogs.forEach(
+                        (log) => {
+
+                            log.visible =
+                                false;
+                        }
+                    );
+
+                    bridgeLogIndex =
+                        0;
+
+                    storyRoot.visible =
+                        true;
+
+                    storyPlaced =
+                        true;
+
+                    reticle.visible =
+                        false;
+
+                    runIntro();
+
+                    return;
+                }
+
+                handleStoryTap();
+            }
+        );
+
+        scene.add(
+            controller
+        );
+
+        // ============================================================
+        // PHONE TAP FALLBACK
+        // ============================================================
+
+        function handleTouchEnd() {
+
+            if (storyPlaced) {
+
+                handleStoryTap();
+            }
+        }
+
+        function handlePointerUp() {
+
+            if (storyPlaced) {
+
+                handleStoryTap();
+            }
+        }
+
+        window.addEventListener(
+            "touchend",
+            handleTouchEnd,
+            {
+                passive:
+                    true
+            }
+        );
+
+        window.addEventListener(
+            "pointerup",
+            handlePointerUp
+        );
+
+        // ============================================================
+        // XR LOOP
+        // ============================================================
+
+        function render(
+            timestamp,
+            frame
+        ) {
+
+            const delta =
+                Math.min(
+                    clock.getDelta(),
+                    0.05
+                );
+
+            if (ellieMixer) {
+
+                ellieMixer.update(
+                    delta
+                );
+            }
+
+            updateEllieMovement(
+                delta
+            );
+
+            updateObjectMovement(
+                delta
+            );
+
+            // Animated river surface
+            if (
+                waterMaterial &&
+                waterMaterial.uniforms
+            ) {
+
+                waterMaterial.uniforms
+                    .uTime.value =
+                    timestamp * 0.001;
+            }
+            if (frame) {
+
+                const referenceSpace =
+                    renderer.xr
+                        .getReferenceSpace();
+
+                const session =
+                    renderer.xr
+                        .getSession();
+
+                if (
+                    !hitTestSourceRequested
+                ) {
+
+                    session
+                        .requestReferenceSpace(
+                            "viewer"
+                        )
+                        .then(
+                            (viewerSpace) => {
+
+                                return session
+                                    .requestHitTestSource({
+                                        space:
+                                            viewerSpace
+                                    });
+                            }
+                        )
+                        .then(
+                            (source) => {
+
+                                hitTestSource =
+                                    source;
+                            }
+                        );
+
+                    session.addEventListener(
+                        "end",
+                        () => {
+
+                            hitTestSourceRequested =
+                                false;
+
+                            hitTestSource =
+                                null;
+
+                            storyPlaced =
+                                false;
+
+                            storyStage =
+                                "WAITING";
+
+                            interactionLocked =
+                                true;
+
+                            sequenceRunning =
+                                false;
+
+                            ellieMovement =
+                                null;
+
+                            objectMovement =
+                                null;
+
+                            stopWalk();
+
+                            if (storyRoot) {
+
+                                storyRoot.visible =
+                                    false;
+                            }
+
+                            if (currentAudio) {
+
+                                currentAudio.pause();
+                            }
+                        }
+                    );
+
+                    hitTestSourceRequested =
+                        true;
+                }
+
+                if (
+                    hitTestSource &&
+                    !storyPlaced
+                ) {
+
+                    const results =
+                        frame.getHitTestResults(
+                            hitTestSource
+                        );
+
+                    if (
+                        results.length > 0
+                    ) {
+
+                        const pose =
+                            results[0]
+                                .getPose(
+                                    referenceSpace
+                                );
+
+                        if (pose) {
+
+                            reticle.visible =
+                                true;
+
+                            reticle.matrix
+                                .fromArray(
+                                    pose.transform
+                                        .matrix
+                                );
+                        }
+                    }
+                    else {
+
+                        reticle.visible =
+                            false;
+                    }
+                }
+            }
+
+            renderer.render(
+                scene,
+                camera
             );
         }
-    }
+
+        renderer.setAnimationLoop(
+            render
+        );
+
+        // ============================================================
+        // RESIZE
+        // ============================================================
+
+        function onResize() {
+
+            camera.aspect =
+                window.innerWidth /
+                window.innerHeight;
+
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(
+                window.innerWidth,
+                window.innerHeight
+            );
+        }
+
+        window.addEventListener(
+            "resize",
+            onResize
+        );
+
+        // ============================================================
+        // CLEANUP
+        // ============================================================
+
+        return () => {
+
+            window.removeEventListener(
+                "resize",
+                onResize
+            );
+
+            window.removeEventListener(
+                "touchend",
+                handleTouchEnd
+            );
+
+            window.removeEventListener(
+                "pointerup",
+                handlePointerUp
+            );
+
+            renderer.setAnimationLoop(
+                null
+            );
+
+            if (currentAudio) {
+
+                currentAudio.pause();
+            }
+
+            if (
+                renderer.domElement &&
+                renderer.domElement.parentNode
+            ) {
+
+                renderer.domElement
+                    .parentNode
+                    .removeChild(
+                        renderer.domElement
+                    );
+            }
+
+            if (
+                arButton &&
+                arButton.parentNode
+            ) {
+
+                arButton.parentNode
+                    .removeChild(
+                        arButton
+                    );
+            }
+
+            renderer.dispose();
+        };
+
+    }, []);
+
+    return (
+        <div
+            ref={containerRef}
+            style={{
+                width:
+                    "100vw",
+                height:
+                    "100vh",
+                overflow:
+                    "hidden",
+                background:
+                    "black"
+            }}
+        />
+    );
 }
