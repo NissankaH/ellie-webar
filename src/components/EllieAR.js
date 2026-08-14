@@ -19,7 +19,11 @@ export default function EllieAR() {
         let hitTestSourceRequested = false;
 
         let storyRoot = null;
+
         let scene1Model = null;
+        let scene2Model = null;
+        let scene3Model = null;
+        let scene4Model = null;
 
         let storyPlaced = false;
         let modelsReady = false;
@@ -113,26 +117,60 @@ export default function EllieAR() {
         scene.add(storyRoot);
 
         // -----------------------------------------
-        // LOAD SCENE 1 ONLY
+        // GLTF LOADER
         // -----------------------------------------
 
         const loader = new GLTFLoader();
 
-        console.log(
-            "Trying to load /models/Scene1.glb"
-        );
+        function loadModel(path) {
+            return new Promise((resolve, reject) => {
+                console.log("Loading:", path);
 
-        loader.load(
-            "/models/Scene1.glb",
+                loader.load(
+                    path,
 
-            (gltf) => {
+                    (gltf) => {
+                        console.log(
+                            "Loaded successfully:",
+                            path
+                        );
+
+                        resolve(gltf.scene);
+                    },
+
+                    undefined,
+
+                    (error) => {
+                        console.error(
+                            "FAILED TO LOAD:",
+                            path,
+                            error
+                        );
+
+                        reject(error);
+                    }
+                );
+            });
+        }
+
+        // -----------------------------------------
+        // LOAD ALL STORY SCENES
+        // -----------------------------------------
+
+        async function loadStory() {
+            try {
                 console.log(
-                    "Scene1 loaded successfully."
+                    "Loading all story scenes..."
                 );
 
-                scene1Model = gltf.scene;
+                // ---------------------------------
+                // SCENE 1
+                // ---------------------------------
 
-                // Adjust later if too big/small.
+                scene1Model = await loadModel(
+                    "/models/Scene1.glb"
+                );
+
                 scene1Model.scale.setScalar(
                     0.1
                 );
@@ -143,35 +181,95 @@ export default function EllieAR() {
                     scene1Model
                 );
 
+                console.log(
+                    "Scene 1 ready."
+                );
+
+                // ---------------------------------
+                // SCENE 2
+                // ---------------------------------
+
+                scene2Model = await loadModel(
+                    "/models/Scene2.glb"
+                );
+
+                scene2Model.scale.setScalar(
+                    0.1
+                );
+
+                scene2Model.visible = false;
+
+                storyRoot.add(
+                    scene2Model
+                );
+
+                console.log(
+                    "Scene 2 ready."
+                );
+
+                // ---------------------------------
+                // SCENE 3
+                // ---------------------------------
+
+                scene3Model = await loadModel(
+                    "/models/Scene3.glb"
+                );
+
+                scene3Model.scale.setScalar(
+                    0.1
+                );
+
+                scene3Model.visible = false;
+
+                storyRoot.add(
+                    scene3Model
+                );
+
+                console.log(
+                    "Scene 3 ready."
+                );
+
+                // ---------------------------------
+                // SCENE 4
+                // ---------------------------------
+
+                scene4Model = await loadModel(
+                    "/models/Scene4.glb"
+                );
+
+                scene4Model.scale.setScalar(
+                    0.1
+                );
+
+                scene4Model.visible = false;
+
+                storyRoot.add(
+                    scene4Model
+                );
+
+                console.log(
+                    "Scene 4 ready."
+                );
+
+                // ---------------------------------
+                // READY
+                // ---------------------------------
+
                 modelsReady = true;
 
                 console.log(
-                    "SCENE 1 READY FOR PLACEMENT"
+                    "ALL 4 SCENES READY FOR AR"
                 );
-            },
-
-            (progress) => {
-                if (progress.total > 0) {
-                    const percent =
-                        (
-                            progress.loaded /
-                            progress.total
-                        ) * 100;
-
-                    console.log(
-                        "Scene1 loading:",
-                        percent.toFixed(0) + "%"
-                    );
-                }
-            },
-
-            (error) => {
+            }
+            catch (error) {
                 console.error(
-                    "FAILED TO LOAD Scene1.glb",
+                    "STORY LOAD FAILED:",
                     error
                 );
             }
-        );
+        }
+
+        loadStory();
 
         // -----------------------------------------
         // RETICLE
@@ -239,14 +337,14 @@ export default function EllieAR() {
 
                 if (storyPlaced) {
                     console.log(
-                        "Placement blocked: already placed."
+                        "Placement blocked: story already placed."
                     );
                     return;
                 }
 
                 if (!modelsReady) {
                     console.log(
-                        "Placement blocked: Scene1 not loaded."
+                        "Placement blocked: scenes not loaded."
                     );
                     return;
                 }
@@ -259,6 +357,7 @@ export default function EllieAR() {
                         reticle.matrix
                     );
 
+                // Place whole story.
                 storyRoot.position.copy(
                     placementPosition
                 );
@@ -271,11 +370,32 @@ export default function EllieAR() {
 
                 storyRoot.visible = true;
 
+                // ---------------------------------
+                // ONLY SCENE 1 VISIBLE
+                // ---------------------------------
+
+                if (scene1Model) {
+                    scene1Model.visible = true;
+                }
+
+                if (scene2Model) {
+                    scene2Model.visible = false;
+                }
+
+                if (scene3Model) {
+                    scene3Model.visible = false;
+                }
+
+                if (scene4Model) {
+                    scene4Model.visible = false;
+                }
+
                 storyPlaced = true;
+
                 reticle.visible = false;
 
                 console.log(
-                    "SCENE 1 PLACED SUCCESSFULLY"
+                    "STORY PLACED - SCENE 1 ONLY"
                 );
             }
         );
@@ -312,7 +432,8 @@ export default function EllieAR() {
                         )
                         .then(
                             (source) => {
-                                hitTestSource = source;
+                                hitTestSource =
+                                    source;
 
                                 console.log(
                                     "Hit test source ready."
@@ -331,17 +452,24 @@ export default function EllieAR() {
                     session.addEventListener(
                         "end",
                         () => {
-                            hitTestSourceRequested = false;
-                            hitTestSource = null;
-                            storyPlaced = false;
+                            hitTestSourceRequested =
+                                false;
+
+                            hitTestSource =
+                                null;
+
+                            storyPlaced =
+                                false;
 
                             if (storyRoot) {
-                                storyRoot.visible = false;
+                                storyRoot.visible =
+                                    false;
                             }
                         }
                     );
 
-                    hitTestSourceRequested = true;
+                    hitTestSourceRequested =
+                        true;
                 }
 
                 // ---------------------------------
@@ -357,7 +485,9 @@ export default function EllieAR() {
                             hitTestSource
                         );
 
-                    if (results.length > 0) {
+                    if (
+                        results.length > 0
+                    ) {
                         const hit =
                             results[0];
 
@@ -367,7 +497,8 @@ export default function EllieAR() {
                             );
 
                         if (pose) {
-                            reticle.visible = true;
+                            reticle.visible =
+                                true;
 
                             reticle.matrix.fromArray(
                                 pose.transform.matrix
@@ -375,7 +506,8 @@ export default function EllieAR() {
                         }
                     }
                     else {
-                        reticle.visible = false;
+                        reticle.visible =
+                            false;
                     }
                 }
             }
