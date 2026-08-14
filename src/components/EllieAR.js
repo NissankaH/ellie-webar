@@ -19,6 +19,9 @@ export default function EllieAR() {
         // Keep Ellie very slow and gentle.
         const ELLIE_WALK_SPEED = 0.009;
 
+// Faster walking ONLY during Scene 3
+        const ELLIE_SCENE3_SPEED = 0.02;
+
         // Ellie faces forward.
         const ELLIE_ROTATION_OFFSET = -90;
 
@@ -490,9 +493,107 @@ export default function EllieAR() {
             );
         }
 
-        // ============================================================
-        // MOVEMENT SAFETY
-        // ============================================================
+        function alignScene3ToScene2() {
+
+            if (
+                !scene2Footp4Target ||
+                !bridgeStartTarget ||
+                !scene3Model ||
+                !storyRoot
+            ) {
+
+                console.warn(
+                    "SCENE 3 ALIGNMENT FAILED",
+                    {
+                        scene2End: scene2Footp4Target?.name,
+                        scene3Start: bridgeStartTarget?.name
+                    }
+                );
+
+                return;
+            }
+
+            // Make sure Three.js has calculated all transforms.
+            storyRoot.updateMatrixWorld(true);
+
+            // Scene 2 ending position.
+            const scene2EndWorld =
+                new THREE.Vector3();
+
+            scene2Footp4Target.getWorldPosition(
+                scene2EndWorld
+            );
+
+            // Scene 3 starting position.
+            const scene3StartWorld =
+                new THREE.Vector3();
+
+            bridgeStartTarget.getWorldPosition(
+                scene3StartWorld
+            );
+
+            console.log(
+                "BEFORE ALIGNMENT",
+                {
+                    scene2End: scene2EndWorld,
+                    scene3Start: scene3StartWorld
+                }
+            );
+
+            // Difference between the two positions.
+            const worldOffset =
+                new THREE.Vector3(
+                    scene2EndWorld.x - scene3StartWorld.x,
+                    0,
+                    scene2EndWorld.z - scene3StartWorld.z
+                );
+
+            // Convert world-space movement into storyRoot local movement.
+            const worldOrigin =
+                new THREE.Vector3(
+                    0,
+                    0,
+                    0
+                );
+
+            const localOrigin =
+                storyRoot.worldToLocal(
+                    worldOrigin.clone()
+                );
+
+            const localOffsetPoint =
+                storyRoot.worldToLocal(
+                    worldOffset.clone()
+                );
+
+            const localOffset =
+                localOffsetPoint.sub(
+                    localOrigin
+                );
+
+            // Move WHOLE Scene3.
+            scene3Model.position.add(
+                localOffset
+            );
+
+            storyRoot.updateMatrixWorld(true);
+
+            // Check new position.
+            const newScene3StartWorld =
+                new THREE.Vector3();
+
+            bridgeStartTarget.getWorldPosition(
+                newScene3StartWorld
+            );
+
+            console.log(
+                "SCENE 3 ALIGNED",
+                {
+                    scene2End: scene2EndWorld,
+                    scene3Start: newScene3StartWorld
+                }
+            );
+        }
 
         function isUnsafeMovementObject(
             object
@@ -950,9 +1051,7 @@ export default function EllieAR() {
                         "ReturnTarget"
                     );
 
-                // ====================================================
-                // SCENE 4
-                // ====================================================
+                alignScene3ToScene2();
 
                 const gltf4 =
                     await loadGLB(
@@ -1655,7 +1754,7 @@ export default function EllieAR() {
                 console.log(
                     "ELLIE -> logLiftTarget"
                 );
-
+                    
                 await moveEllieTo(
                     logLiftTarget,
                     ELLIE_WALK_SPEED
@@ -1858,25 +1957,17 @@ export default function EllieAR() {
             );
         }
 
-        // ============================================================
-        // SCENE 3 BRIDGE
-        // ============================================================
-
         async function buildBridgeLog() {
 
             if (
                 sequenceRunning ||
                 bridgeLogIndex >= 3
             ) {
-
                 return;
             }
 
-            sequenceRunning =
-                true;
-
-            interactionLocked =
-                true;
+            sequenceRunning = true;
+            interactionLocked = true;
 
             const sourceLog =
                 sourceLogs[
@@ -1901,7 +1992,7 @@ export default function EllieAR() {
 
                 await moveEllieTo(
                     bridgeStartTarget,
-                    ELLIE_WALK_SPEED
+                    ELLIE_SCENE3_SPEED
                 );
             }
 
@@ -1913,7 +2004,7 @@ export default function EllieAR() {
 
                 await moveEllieTo(
                     logPileTarget,
-                    ELLIE_WALK_SPEED
+                    ELLIE_SCENE3_SPEED
                 );
             }
 
@@ -1951,7 +2042,7 @@ export default function EllieAR() {
                 elliePromise =
                     moveEllieTo(
                         bridgePlaceTarget,
-                        ELLIE_WALK_SPEED
+                        ELLIE_SCENE3_SPEED
                     );
             }
 
@@ -1961,7 +2052,7 @@ export default function EllieAR() {
             ]);
 
             // ========================================================
-            // 4. REPLACE MOVING LOG WITH BRIDGE LOG
+            // 4. REPLACE MOVING LOG WITH FINISHED BRIDGE LOG
             // ========================================================
 
             if (sourceLog) {
@@ -1979,7 +2070,7 @@ export default function EllieAR() {
             bridgeLogIndex++;
 
             // ========================================================
-            // FINISHED ALL THREE
+            // ALL THREE LOGS FINISHED
             // ========================================================
 
             if (
@@ -2001,7 +2092,7 @@ export default function EllieAR() {
 
                     await moveEllieTo(
                         finalTarget,
-                        ELLIE_WALK_SPEED
+                        ELLIE_SCENE3_SPEED
                     );
                 }
 
@@ -2025,14 +2116,14 @@ export default function EllieAR() {
             }
 
             // ========================================================
-            // 5. RETURN FOR NEXT LOG
+            // 5. ELLIE RETURNS FOR NEXT LOG
             // ========================================================
 
             if (returnTarget) {
 
                 await moveEllieTo(
                     returnTarget,
-                    ELLIE_WALK_SPEED
+                    ELLIE_SCENE3_SPEED
                 );
             }
             else if (
@@ -2041,7 +2132,7 @@ export default function EllieAR() {
 
                 await moveEllieTo(
                     bridgeStartTarget,
-                    ELLIE_WALK_SPEED
+                    ELLIE_SCENE3_SPEED
                 );
             }
 
@@ -2052,6 +2143,10 @@ export default function EllieAR() {
 
             sequenceRunning =
                 false;
+
+            console.log(
+                "READY FOR NEXT BRIDGE LOG"
+            );
         }
 
         // ============================================================
