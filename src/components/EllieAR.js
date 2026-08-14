@@ -20,7 +20,7 @@ export default function EllieAR() {
         const ELLIE_WALK_SPEED = 0.008;
 
         // Scene 3: quicker because of repeated bridge trips.
-        const ELLIE_SCENE3_SPEED = 0.018;
+        const ELLIE_SCENE3_SPEED = 0.04;
 
         const ELLIE_ROTATION_OFFSET = -90;
 
@@ -133,6 +133,7 @@ export default function EllieAR() {
         let bridgeLogIndex = 0;
 
         let currentAudio = null;
+        let backgroundMusic = null;
 
         let lastTapTime = 0;
 
@@ -782,16 +783,16 @@ export default function EllieAR() {
                 "SCENE 3 ALIGNED TO SCENE 2"
             );
         }
-        function closeScene4Gap() {
+
+        function alignScene4DirectlyAfterScene3() {
 
             if (
                 !scene3Model ||
-                !scene4Model ||
-                !storyRoot
+                !scene4Model
             ) {
 
                 console.warn(
-                    "SCENE 4 GAP FIX MISSING MODELS"
+                    "SCENE 4 ALIGNMENT MODELS MISSING"
                 );
 
                 return;
@@ -801,186 +802,190 @@ export default function EllieAR() {
                 true
             );
 
-            // ------------------------------------------------------------
-            // GET FULL WORLD BOUNDS
-            // ------------------------------------------------------------
+            // ========================================================
+            // WORLD BOUNDING BOXES
+            // ========================================================
 
-            const scene3Box =
+            const box3 =
                 new THREE.Box3()
                     .setFromObject(
                         scene3Model
                     );
 
-            const scene4Box =
+            const box4 =
                 new THREE.Box3()
                     .setFromObject(
                         scene4Model
                     );
 
             if (
-                scene3Box.isEmpty() ||
-                scene4Box.isEmpty()
+                box3.isEmpty() ||
+                box4.isEmpty()
             ) {
 
                 console.warn(
-                    "SCENE 4 GAP FIX FAILED - EMPTY BOUNDS"
+                    "SCENE BOUNDS EMPTY"
                 );
 
                 return;
             }
 
-            const scene3Center =
+            const center3 =
                 new THREE.Vector3();
 
-            const scene4Center =
+            const center4 =
                 new THREE.Vector3();
 
-            scene3Box.getCenter(
-                scene3Center
+            box3.getCenter(
+                center3
             );
 
-            scene4Box.getCenter(
-                scene4Center
+            box4.getCenter(
+                center4
             );
 
-            // ------------------------------------------------------------
-            // ORIGINAL DIRECTION FROM SCENE 3 -> SCENE 4
-            // ------------------------------------------------------------
+            // ========================================================
+            // DETERMINE WHICH AXIS THE TWO SCENES ARE SEPARATED ON
+            // ========================================================
 
-            const direction =
-                scene4Center
-                    .clone()
-                    .sub(
-                        scene3Center
-                    );
+            const dx =
+                center4.x -
+                center3.x;
 
-            direction.y =
-                0;
+            const dz =
+                center4.z -
+                center3.z;
 
-            if (
-                direction.lengthSq() <
-                0.000001
-            ) {
-
-                console.warn(
-                    "SCENE 4 DIRECTION TOO SMALL"
-                );
-
-                return;
-            }
-
-            direction.normalize();
-
-            // ------------------------------------------------------------
-            // FIND EDGE OF EACH SCENE ALONG THAT DIRECTION
-            // ------------------------------------------------------------
-
-            const scene3Size =
-                new THREE.Vector3();
-
-            const scene4Size =
-                new THREE.Vector3();
-
-            scene3Box.getSize(
-                scene3Size
-            );
-
-            scene4Box.getSize(
-                scene4Size
-            );
-
-            const scene3Radius =
-                (
-                    Math.abs(direction.x) *
-                        scene3Size.x +
-                    Math.abs(direction.z) *
-                        scene3Size.z
-                ) * 0.5;
-
-            const scene4Radius =
-                (
-                    Math.abs(direction.x) *
-                        scene4Size.x +
-                    Math.abs(direction.z) *
-                        scene4Size.z
-                ) * 0.5;
-
-            const currentCenterDistance =
-                scene3Center.distanceTo(
-                    scene4Center
-                );
-
-            const currentGap =
-                currentCenterDistance -
-                scene3Radius -
-                scene4Radius;
-
-            // ------------------------------------------------------------
-            // DESIRED SMALL GAP
-            //
-            // World units.
-            // Adjust later if we want slightly more/less space.
-            // ------------------------------------------------------------
-
-            const DESIRED_GAP =
-                0.04;
-
-            const amountToClose =
-                Math.max(
-                    0,
-                    currentGap -
-                    DESIRED_GAP
-                );
-
-            if (
-                amountToClose <=
-                0
-            ) {
-
-                console.log(
-                    "SCENE 4 ALREADY CLOSE ENOUGH"
-                );
-
-                return;
-            }
-
-            // World offset toward Scene3.
-            const worldMove =
-                direction
-                    .clone()
-                    .multiplyScalar(
-                        -amountToClose
-                    );
-
-            // Convert world movement to storyRoot local movement.
-            const worldOrigin =
+            const worldOffset =
                 new THREE.Vector3(
                     0,
                     0,
                     0
                 );
 
-            const localOrigin =
+            // Very tiny seam so they visually touch
+            // without overlapping.
+            const GAP =
+                0.005;
+
+            // ========================================================
+            // MOSTLY X DIRECTION
+            // ========================================================
+
+            if (
+                Math.abs(dx) >
+                Math.abs(dz)
+            ) {
+
+                if (dx > 0) {
+
+                    // Scene 4 is to the +X side.
+                    const currentGap =
+                        box4.min.x -
+                        box3.max.x;
+
+                    if (
+                        currentGap >
+                        GAP
+                    ) {
+
+                        worldOffset.x =
+                            -(currentGap - GAP);
+                    }
+                }
+                else {
+
+                    // Scene 4 is to the -X side.
+                    const currentGap =
+                        box3.min.x -
+                        box4.max.x;
+
+                    if (
+                        currentGap >
+                        GAP
+                    ) {
+
+                        worldOffset.x =
+                            currentGap - GAP;
+                    }
+                }
+            }
+
+            // ========================================================
+            // MOSTLY Z DIRECTION
+            // ========================================================
+
+            else {
+
+                if (dz > 0) {
+
+                    // Scene 4 is after Scene 3 in +Z.
+                    const currentGap =
+                        box4.min.z -
+                        box3.max.z;
+
+                    if (
+                        currentGap >
+                        GAP
+                    ) {
+
+                        worldOffset.z =
+                            -(currentGap - GAP);
+                    }
+                }
+                else {
+
+                    // Scene 4 is after Scene 3 in -Z.
+                    const currentGap =
+                        box3.min.z -
+                        box4.max.z;
+
+                    if (
+                        currentGap >
+                        GAP
+                    ) {
+
+                        worldOffset.z =
+                            currentGap - GAP;
+                    }
+                }
+            }
+
+            // ========================================================
+            // CONVERT WORLD OFFSET TO STORYROOT LOCAL OFFSET
+            // ========================================================
+
+            const worldA =
+                new THREE.Vector3(
+                    0,
+                    0,
+                    0
+                );
+
+            const worldB =
+                worldOffset.clone();
+
+            const localA =
                 storyRoot.worldToLocal(
-                    worldOrigin.clone()
+                    worldA
                 );
 
-            const localMovePoint =
+            const localB =
                 storyRoot.worldToLocal(
-                    worldMove.clone()
+                    worldB
                 );
 
-            const localMove =
-                localMovePoint.sub(
-                    localOrigin
+            const localOffset =
+                localB.sub(
+                    localA
                 );
 
-            // ------------------------------------------------------------
-            // MOVE WHOLE SCENE 4 CLOSER
-            // ------------------------------------------------------------
+            // ========================================================
+            // MOVE SCENE 4 ONLY
+            // ========================================================
 
             scene4Model.position.add(
-                localMove
+                localOffset
             );
 
             storyRoot.updateMatrixWorld(
@@ -988,16 +993,17 @@ export default function EllieAR() {
             );
 
             console.log(
-                "SCENE 4 GAP CLOSED",
+                "SCENE 4 ALIGNED DIRECTLY AFTER SCENE 3",
                 {
-                    oldGap:
-                        currentGap,
+                    worldOffsetX:
+                        worldOffset.x,
 
-                    newGap:
-                        DESIRED_GAP
+                    worldOffsetZ:
+                        worldOffset.z
                 }
             );
         }
+
         async function loadEnvironment() {
 
             try {
@@ -1426,7 +1432,7 @@ export default function EllieAR() {
                     );
 
                 // Connect reunion scene to bridge.
-                closeScene4Gap();
+                alignScene4DirectlyAfterScene3();
 
                 scenesReady =
                     true;
@@ -1513,8 +1519,56 @@ export default function EllieAR() {
         loadEllie();
 
         // ============================================================
-        // AUDIO
+        // BACKGROUND MUSIC
         // ============================================================
+
+        function startBackgroundMusic() {
+
+            if (!backgroundMusic) {
+
+                backgroundMusic =
+                    new Audio(
+                        "/audio/bg.mp3"
+                    );
+
+                backgroundMusic.loop =
+                    true;
+
+                // Quiet background level: 15%
+                backgroundMusic.volume =
+                    0.15;
+
+                backgroundMusic.preload =
+                    "auto";
+            }
+
+            if (backgroundMusic.paused) {
+
+                backgroundMusic
+                    .play()
+                    .catch(
+                        (error) => {
+
+                            console.warn(
+                                "BG MUSIC COULD NOT START:",
+                                error
+                            );
+                        }
+                    );
+            }
+        }
+
+        function stopBackgroundMusic() {
+
+            if (!backgroundMusic) {
+                return;
+            }
+
+            backgroundMusic.pause();
+
+            backgroundMusic.currentTime =
+                0;
+        }
 
         function playVoice(number) {
 
@@ -1991,11 +2045,6 @@ export default function EllieAR() {
             sequenceRunning =
                 false;
         }
-
-        // ============================================================
-        // SCENE 2
-        // ============================================================
-
         async function runScene2() {
 
             if (sequenceRunning) {
@@ -2011,9 +2060,13 @@ export default function EllieAR() {
             storyStage =
                 "LOG_ACTION";
 
-            // Voice 4.
-            const voice4 =
-                playVoice(4);
+            // ========================================================
+            // AUDIO 4
+            // ========================================================
+
+            // Start narration but don't make the movement wait
+            // for the narration to finish.
+            playVoice(4);
 
             // ========================================================
             // ELLIE -> LOG LIFT TARGET
@@ -2029,7 +2082,8 @@ export default function EllieAR() {
 
             stopWalk();
 
-            await wait(300);
+            // Tiny natural pause only.
+            await wait(100);
 
             // ========================================================
             // LOG RISES
@@ -2065,10 +2119,10 @@ export default function EllieAR() {
                 );
             }
 
-            await wait(400);
-
             // ========================================================
-            // LOG -> SIDE TARGET
+            // LOG -> LOG SIDE TARGET
+            //
+            // NO EXTRA WAIT HERE.
             // ========================================================
 
             if (
@@ -2089,37 +2143,42 @@ export default function EllieAR() {
             }
 
             // ========================================================
-            // FINAL CHANGE:
+            // LOG IS NOW PLACED.
             //
-            // AS SOON AS LOG IS PLACED:
-            // Scene 3 appears.
-            // Audio 5 starts.
-            // Ellie walks toward river at Scene3 speed.
+            // Transition immediately.
             // ========================================================
-
-            scene3Model.visible =
-                true;
 
             console.log(
-                "LOG PLACED - SCENE 3 START"
+                "LOG PLACED - IMMEDIATE SCENE 3 TRANSITION"
             );
 
-            // Voice 4 shouldn't block this transition.
-            // Let it finish naturally in background.
+            // Show Scene 3 immediately.
+            if (scene3Model) {
+
+                scene3Model.visible =
+                    true;
+            }
 
             // ========================================================
-            // AUDIO 5 + WALK TO RIVER TOGETHER
+            // AUDIO 5 + ELLIE -> RIVER
+            //
+            // Both begin immediately after log placement.
             // ========================================================
+
+            const audio5 =
+                playVoice(5);
+
+            const walkToRiver =
+                riverTarget
+                    ? moveEllieTo(
+                        riverTarget,
+                        ELLIE_SCENE3_SPEED
+                    )
+                    : Promise.resolve();
 
             await Promise.all([
-
-                playVoice(5),
-
-                moveEllieTo(
-                    riverTarget,
-                    ELLIE_SCENE3_SPEED
-                )
-
+                audio5,
+                walkToRiver
             ]);
 
             stopWalk();
@@ -2129,6 +2188,10 @@ export default function EllieAR() {
             // ========================================================
 
             await playVoice(6);
+
+            // ========================================================
+            // BRIDGE READY
+            // ========================================================
 
             storyStage =
                 "BRIDGE";
@@ -2143,10 +2206,6 @@ export default function EllieAR() {
                 "BRIDGE READY"
             );
         }
-
-        // ============================================================
-        // SCENE 3 - BRIDGE
-        // ============================================================
 
         async function buildBridgeLog() {
 
@@ -2535,6 +2594,7 @@ export default function EllieAR() {
                     reticle.visible =
                         false;
 
+                    startBackgroundMusic();
                     runIntro();
 
                     return;
@@ -2698,6 +2758,7 @@ export default function EllieAR() {
 
                                 currentAudio.pause();
                             }
+                            stopBackgroundMusic();
                         }
                     );
 
@@ -2807,6 +2868,7 @@ export default function EllieAR() {
 
                 currentAudio.pause();
             }
+            stopBackgroundMusic();
 
             if (
                 renderer.domElement &&
