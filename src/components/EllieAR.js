@@ -14,7 +14,7 @@ export default function EllieAR() {
         // SETTINGS
         // ============================================================
 
-        const WORLD_SCALE = 2.5;
+        const WORLD_SCALE = 2.8;
 
         // Very gentle walking speed.
         const ELLIE_WALK_SPEED = 0.008;
