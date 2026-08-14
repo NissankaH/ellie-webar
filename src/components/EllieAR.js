@@ -2538,3 +2538,5 @@ export default function EllieAR() {
                 "READY FOR NEXT BRIDGE TAP"
             );
         }
+    }
+}
