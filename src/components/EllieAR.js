@@ -17,13 +17,13 @@ export default function EllieAR() {
         const WORLD_SCALE = 2.5;
 
         // Very slow child-friendly walking.
-        const ELLIE_WALK_SPEED = 0.025;
+        const ELLIE_WALK_SPEED = 0.008;
 
         const LOG_MOVE_SPEED = 0.08;
 
         // Keep this because your elephant model previously needed
         // a 90 degree direction correction.
-        const ELLIE_ROTATION_OFFSET = 90;
+        const ELLIE_ROTATION_OFFSET = -90;
 
         const TAP_DEBOUNCE_MS = 350;
 
